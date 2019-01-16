@@ -6,7 +6,7 @@
 harmony::harmony(int __K): K(__K) {}
 
 
-void harmony::setup(MATTYPE& __Z, MATTYPE& __Phi, VECTYPE __Pr_b,
+void harmony::setup(MATTYPE& __Z, MATTYPE& __Phi, MATTYPE& __Phi_moe, VECTYPE __Pr_b,
                 float __sigma, VECTYPE __theta, int __max_iter_kmeans, 
                 float __epsilon_kmeans, float __epsilon_harmony, bool __correct_with_Zorig,
                 float __alpha, int __K, float tau, float __block_size, 
@@ -21,10 +21,10 @@ void harmony::setup(MATTYPE& __Z, MATTYPE& __Phi, VECTYPE __Pr_b,
   Z_corr = MATTYPE(__Z);
   Z_orig = MATTYPE(__Z);
 
-//  Phi_moe = Phi_moe_new;
+  Phi_moe = __Phi_moe;
   Phi = __Phi;
-  Phi_moe = ones<MATTYPE>(Phi.n_rows + 1, Phi.n_cols); // same as Phi plus an intercept term
-  Phi_moe.rows(1, Phi_moe.n_rows - 1) = Phi;
+//  Phi_moe = ones<MATTYPE>(Phi.n_rows + 1, Phi.n_cols); // same as Phi plus an intercept term
+//  Phi_moe.rows(1, Phi_moe.n_rows - 1) = Phi;
   N = Z_corr.n_cols;
 //  N_b = sum(Phi, 1);
 //  Pr_b = N_b / N;
@@ -467,6 +467,7 @@ RCPP_MODULE(harmony_module) {
   .field("Y", &harmony::Y)  
   .field("Phi", &harmony::Phi)        
   .field("Phi_moe", &harmony::Phi_moe)
+  .field("Phi_Rk", &harmony::Phi_Rk)
   .field("Pr_b", &harmony::Pr_b)    
   .field("objective_kmeans", &harmony::objective_kmeans)
   .field("objective_kmeans_dist", &harmony::objective_kmeans_dist)

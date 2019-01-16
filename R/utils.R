@@ -1,13 +1,56 @@
-onehot <- function(x) {
-  res <- data.frame(x)
-  res$id <- row.names(res)
-  res <- res %>%
-    dplyr::mutate(dummy = 1) %>% 
-    tidyr::spread(x, dummy, fill = 0) %>% 
-    dplyr::select(-id) %>%
-    as.matrix
-  return(res)
+model.matrix.full <- function(vars_use, data_df, intercept = 1, 
+                              bin_numerical = FALSE, binning.method = "equal_frequency", num.bin = 10) {    
+    discrete_vars <- c()
+    for (varname in vars_use) {
+        if ("character" %in% class(data_df[[varname]])) {
+            data_df[[varname]] <- factor(data_df[[varname]])
+            discrete_vars <- c(discrete_vars, varname)
+        } else if ("factor" %in% class(data_df[[varname]])) {
+            discrete_vars <- c(discrete_vars, varname)            
+        } else {
+            ## handle continuous covariates
+            if (bin_numerical) {
+                ## METHOD 1: bin it into categorical variable
+                data_df[[varname]] <- factor(do_binning(data_df[[varname]], binning.method, num.bin))
+                discrete_vars <- c(discrete_vars, varname)
+            } else {
+                ## METHOD 2: transform it into z-score 
+                data_df[[varname]] <- scale(data_df[[varname]], center = TRUE, scale = TRUE)
+            }
+        }
+    }
+    
+    
+    if (length(discrete_vars) > 0) {
+        contrasts_df <- lapply(discrete_vars, function(x) {
+            diag(nlevels(data.frame(data_df)[, x, drop = TRUE]))
+        })
+
+        names(contrasts_df) <- discrete_vars
+        res <- model.matrix(as.formula(sprintf("~ %d + %s", intercept, paste(vars_use, collapse = "+"))), 
+                     data=data_df, contrasts.arg=contrasts_df)    
+        
+    } else {
+        res <- model.matrix(as.formula(sprintf("~ %d + %s", intercept, paste(vars_use, collapse = "+"))), 
+                     data=data_df)        
+    }    
+    return(res)
 }
+
+do_binning <- function(values, binning.method = "equal_frequency", num.bin = 10) {
+    if (binning.method == "equal_width") {
+        .breaks <- num.bin
+    }
+    else if (binning.method == "equal_frequency") {
+        .breaks <- quantile(values, probs = seq(0, 1, length.out = num.bin + 1))
+    }
+    else {
+        stop(paste0("Invalid selection: '", binning.method, "' for 'binning.method'."))
+    }
+    cut(values, .breaks, include.lowest = TRUE) %>% as.integer
+}
+
+
 
 HarmonyConvergencePlot <- function(harmonyObj) {
     if (!requireNamespace("ggplot2", quietly = TRUE)) {
@@ -48,7 +91,8 @@ HarmonyMatrix <- function(pc_mat, meta_data, vars_use, theta = NULL, lambda = NU
                           block.size = 0.05, max.iter.harmony = 10, 
                           max.iter.cluster = 200, epsilon.cluster = 1e-5, epsilon.harmony = 1e-4, 
                           burn.in.time = 10, plot_convergence = FALSE, 
-                          return_object = FALSE) {
+                          return_object = FALSE, .num.bin = 10, .bin_numerical = FALSE, 
+                          .binning.method = "equal_frequency") {
 
     ## TODO: check for 
     ##    partially observed batch variables (WARNING)
@@ -57,7 +101,6 @@ HarmonyMatrix <- function(pc_mat, meta_data, vars_use, theta = NULL, lambda = NU
     ##    if theta given, check correct length
     ##    very small batch size and tau=0: suggest tau>0
     ##    is PCA correct? 
-  
     N <- nrow(meta_data)
     cells_as_cols <- TRUE
     if (ncol(pc_mat) != N) {
@@ -77,10 +120,25 @@ HarmonyMatrix <- function(pc_mat, meta_data, vars_use, theta = NULL, lambda = NU
     }    
 
     ## Pre-compute some useful statistics
-    phi <- Reduce(rbind, lapply(vars_use, function(var_use) {t(onehot(meta_data[[var_use]]))}))
-    N_b <- rowSums(phi)
+    phi_cluster <- t(model.matrix.full(vars_use, meta_data, intercept = 0, 
+                                       bin_numerical = TRUE, binning.method = .binning.method, 
+                                       num.bin = .num.bin))
+    phi_moe <- t(model.matrix.full(vars_use, meta_data, intercept = 1, bin_numerical = .bin_numerical))
+
+    N_b <- rowSums(phi_cluster)
     Pr_b <- N_b / N
-    B_vec <- Reduce(c, lapply(vars_use, function(var_use) {length(unique(meta_data[[var_use]]))}))
+    B_vec <- Reduce(c, lapply(vars_use, function(var_use) {
+        if (class(meta_data[[var_use]]) %in% c("factor", "character")) {
+            length(unique(meta_data[[var_use]]))
+        } else {
+            if (.bin_numerical) {
+                .num.bin
+            } else {
+                1
+            }
+        }
+    }))
+
     theta <- Reduce(c, lapply(1:length(B_vec), function(b) rep(theta[b], B_vec[b])))
     theta <- theta * (1 - exp(-(N_b / (nclust * tau)) ^ 2))
 
@@ -91,7 +149,8 @@ HarmonyMatrix <- function(pc_mat, meta_data, vars_use, theta = NULL, lambda = NU
     harmonyObj <- new(harmony, 0) ## 0 is a dummy variable - will change later
     harmonyObj$setup(
         pc_mat, ## Z
-        phi, ## Phi
+        phi, ## Phi for clustering
+        phi_moe, ## Phi for correction
         Pr_b, 
         sigma, ## sigma
         theta, ## theta
@@ -108,7 +167,6 @@ HarmonyMatrix <- function(pc_mat, meta_data, vars_use, theta = NULL, lambda = NU
         burn.in.time, ## window size for kmeans convergence
         lambda_mat
     )
-
                                
     harmonyObj$harmonize(max.iter.harmony)
     if (plot_convergence) plot(HarmonyConvergencePlot(harmonyObj))
@@ -138,7 +196,9 @@ HarmonyMatrix <- function(pc_mat, meta_data, vars_use, theta = NULL, lambda = NU
 RunHarmony <- function(object, group.by.vars, dims.use, theta = NULL, lambda = NULL, sigma = 0.1, alpha = .1,
                        nclust = 100, tau = 0, block.size = 0.05, max.iter.harmony = 10, 
                        max.iter.cluster = 200, epsilon.cluster = 1e-5, epsilon.harmony = 1e-4, 
-                       burn.in.time = 10, plot_convergence = FALSE) {
+                       burn.in.time = 10, plot_convergence = FALSE, 
+                       .num.bin = 10, .bin_numerical = FALSE, 
+                       .binning.method = "equal_frequency") {
     ## CHECK: PCs should be scaled. Unscaled PCs yield misleading results. 
     ##      sqrt(sum((apply(object@dr$pca@cell.embeddings, 2, sd) - object@dr$pca@sdev) ^ 2))  
     if (!requireNamespace("Seurat", quietly = TRUE)) {
@@ -170,7 +230,8 @@ RunHarmony <- function(object, group.by.vars, dims.use, theta = NULL, lambda = N
     harmonyEmbed <- HarmonyMatrix(object@dr$pca@cell.embeddings, object@meta.data, group.by.vars, 
                                    theta, lambda, sigma, alpha, nclust, tau, block.size, max.iter.harmony, 
                                    max.iter.cluster, epsilon.cluster, epsilon.harmony,
-                                   burn.in.time, plot_convergence)
+                                   burn.in.time, plot_convergence,
+                                   .num.bin, .bin_numerical, .binning.method)
       
   
     rownames(harmonyEmbed) <- row.names(object@meta.data)
