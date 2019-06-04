@@ -4,6 +4,9 @@
 #' 
 #' @param object Pipeline object. Must have PCA computed. 
 #' @param group.by.vars Which variable(s) to remove (character vector).
+#' @param var_celltype (optional) prior cell type labels. If you have prior
+#' cell type labels, Harmony will use this information for more accurate
+#' clustering. 
 #' @param dims.use Which PCA dimensions to use for Harmony. By default, use all
 #' @param theta Diversity clustering penalty parameter. Specify for each 
 #' variable in group.by.vars. Default theta=2. theta=0 does not encourage any
@@ -141,7 +144,8 @@ RunHarmony <- function(object, group.by.vars, ...) {
 #' @export
 RunHarmony.seurat <- function(
     object, 
-    group.by.vars, 
+    group.by.vars,
+    var_celltype = NULL,
     dims.use = NULL, 
     theta = NULL, 
     lambda = NULL, 
@@ -193,6 +197,7 @@ RunHarmony.seurat <- function(
         pca_embedding,
         metavars_df,
         group.by.vars, 
+        var_celltype,
         FALSE, 
         0, 
         theta, 
@@ -235,6 +240,7 @@ RunHarmony.seurat <- function(
 RunHarmony.Seurat <- function(
     object, 
     group.by.vars, 
+    var_celltype = NULL,
     dims.use = NULL, 
     theta = NULL, 
     lambda = NULL, 
@@ -286,6 +292,7 @@ RunHarmony.Seurat <- function(
         pca_embedding,
         metavars_df,
         group.by.vars, 
+        var_celltype,
         FALSE, 
         0, 
         theta, 
@@ -335,6 +342,7 @@ RunHarmony.Seurat <- function(
 RunHarmony.SingleCellExperiment <- function(
     object, 
     group.by.vars, 
+    var_celltype = NULL,
     dims.use = NULL, 
     theta = NULL, 
     lambda = NULL, 
@@ -380,6 +388,7 @@ RunHarmony.SingleCellExperiment <- function(
         pca_embedding,
         metavars_df,
         group.by.vars, 
+        var_celltype,
         FALSE, 
         0, 
         theta, 

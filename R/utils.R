@@ -92,6 +92,14 @@ init_cluster <- function(harmonyObj) {
 }
 
 
+init_phi_celltype <- function(harmonyObj, celltypes) {
+    harmonyObj$do_celltype <- TRUE
+    harmonyObj$Phi_celltype <- t(onehot(celltypes))
+    pr_celltype <- matrix(rowSums(harmonyObj$Phi_celltype) / harmonyObj$N, ncol = 1)
+    harmonyObj$B_celltype <- nrow(pr_celltype)
+    harmonyObj$init_celltype_cpp(pr_celltype)
+}
+
 HarmonyConvergencePlot <- function(
         harmonyObj, round_start=1, round_end=Inf, do_wrap=FALSE
     ) {  

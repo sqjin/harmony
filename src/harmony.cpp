@@ -79,11 +79,24 @@ void harmony::init_cluster_cpp() {
   
 }
 
+void harmony::init_celltype_cpp(VECTYPE __Pr_celltype) {
+  O2 = zeros<MATTYPE>(K, B_celltype);
+  E2 = zeros<MATTYPE>(K, B_celltype);  
+  Pr_celltype = __Pr_celltype;
+  E2 = sum(R, 1) * Pr_celltype.t();
+  O2 = R * Phi_celltype.t();
+}
+
 void harmony::compute_objective() {
   float kmeans_error = as_scalar(accu(R % dist_mat)); 
   float _entropy = as_scalar(accu(safe_entropy(R).each_col() % sigma)); // NEW: vector sigma
   float _cross_entropy;
   _cross_entropy = as_scalar(accu((R.each_col() % sigma) % ((arma::repmat(theta.t(), K, 1) % log((O + 1) / (E + 1))) * Phi)));
+    
+  if (do_celltype) {
+    _cross_entropy -= as_scalar(accu((R.each_col() % sigma) % ((arma::repmat(theta_celltype.t(), K, 1) % log((O + 1) / (E + 1))) * Phi_celltype)));
+  }
+    
   objective_kmeans.push_back(kmeans_error + _entropy + _cross_entropy);
   objective_kmeans_dist.push_back(kmeans_error);
   objective_kmeans_entropy.push_back(_entropy); 
@@ -190,15 +203,27 @@ int harmony::update_R() {
     // Step 1: remove cells
     E -= sum(R.cols(cells_update), 1) * Pr_b.t();
     O -= R.cols(cells_update) * Phi.cols(cells_update).t();
+    if (do_celltype) {
+      E2 -= sum(R.cols(cells_update), 1) * Pr_celltype.t();
+      O2 -= R.cols(cells_update) * Phi_celltype.cols(cells_update).t();
+    }
 
     // Step 2: recompute R for removed cells
     R.cols(cells_update) = _scale_dist.cols(cells_update);    
     R.cols(cells_update) = R.cols(cells_update) % (pow((E + 1) / (O + 1), theta) * Phi.cols(cells_update));
+    if (do_celltype) {
+      R.cols(cells_update) = R.cols(cells_update) % (pow((O2 + 1) / (E2 + 1), theta_celltype) * Phi_celltype.cols(cells_update));    
+    }
+      
     R.cols(cells_update) = normalise(R.cols(cells_update), 1, 0); // L1 norm columns
     
     // Step 3: put cells back 
     E += sum(R.cols(cells_update), 1) * Pr_b.t();
     O += R.cols(cells_update) * Phi.cols(cells_update).t(); 
+    if (do_celltype) {
+      E2 += sum(R.cols(cells_update), 1) * Pr_celltype.t();
+      O2 += R.cols(cells_update) * Phi_celltype.cols(cells_update).t();
+    }
     
   }
   return 0;
@@ -227,8 +252,10 @@ RCPP_MODULE(harmony_module) {
   .field("R", &harmony::R)  
   .field("Y", &harmony::Y)  
   .field("Phi", &harmony::Phi)        
+  .field("Phi_celltype", &harmony::Phi_celltype)
   .field("Phi_moe", &harmony::Phi_moe)
   .field("Pr_b", &harmony::Pr_b)    
+  .field("Pr_celltype", &harmony::Pr_celltype)    
   .field("objective_kmeans", &harmony::objective_kmeans)
   .field("objective_kmeans_dist", &harmony::objective_kmeans_dist)
   .field("objective_kmeans_entropy", &harmony::objective_kmeans_entropy)
@@ -237,20 +264,25 @@ RCPP_MODULE(harmony_module) {
   .field("dist_mat", &harmony::dist_mat)
   .field("ran_setup", &harmony::ran_setup)
   .field("ran_init", &harmony::ran_init)
+  .field("do_celltype", &harmony::do_celltype)
   
   
   .field("N", &harmony::N)
   .field("K", &harmony::K)
   .field("B", &harmony::B)
+  .field("B_celltype", &harmony::B_celltype)
   .field("d", &harmony::d)
   .field("W", &harmony::W)
   .field("max_iter_kmeans", &harmony::max_iter_kmeans)
   
   .field("sigma", &harmony::sigma)
   .field("theta", &harmony::theta)
+  .field("theta_celltype", &harmony::theta_celltype)
   .field("lambda", &harmony::lambda)
   .field("O", &harmony::O) 
   .field("E", &harmony::E)    
+  .field("O2", &harmony::O2) 
+  .field("E2", &harmony::E2)    
   .field("update_order", &harmony::update_order)    
   .field("cells_update", &harmony::cells_update)    
   .field("kmeans_rounds", &harmony::kmeans_rounds)    
@@ -265,7 +297,8 @@ RCPP_MODULE(harmony_module) {
   .method("init_cluster_cpp", &harmony::init_cluster_cpp)
   .method("cluster_cpp", &harmony::cluster_cpp)
   .method("moe_correct_ridge_cpp", &harmony::moe_correct_ridge_cpp)
-  
+  .method("init_celltype_cpp", &harmony::init_celltype_cpp)
+
   ;
 }
 

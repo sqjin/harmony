@@ -9,11 +9,16 @@
 #' vector with labels. 
 #' @param vars_use If meta_data is dataframe, this defined which variable(s) 
 #' to remove (character vector).
+#' @param var_celltype (optional) prior cell type labels. If you have prior
+#' cell type labels, Harmony will use this information for more accurate
+#' clustering. 
 #' @param do_pca Whether to perform PCA on input matrix. 
 #' @param npcs If doing PCA on input matrix, number of PCs to compute. 
 #' @param theta Diversity clustering penalty parameter. Specify for each
 #'  variable in vars_use Default theta=2. theta=0 does not encourage any 
 #'  diversity. Larger values of theta result in more diverse clusters. 
+#' @param theta_celltype Same as diversity theta, but for preserving 
+#'  separation between predefined cell types (see var_celltype). 
 #' @param lambda Ridge regression penalty parameter. Specify for each variable
 #'  in vars_use. 
 #' Default lambda=1. Lambda must be strictly positive. Smaller values result 
@@ -80,8 +85,8 @@
 #' head(harmony_object$O) ## batch by cluster co-occurence matrix
 #' 
 HarmonyMatrix <- function(
-    data_mat, meta_data, vars_use, do_pca = TRUE,
-    npcs = 20, theta = NULL, lambda = NULL, sigma = 0.1, 
+    data_mat, meta_data, vars_use, var_celltype = NULL, do_pca = TRUE,
+    npcs = 20, theta = NULL, theta_celltype = NULL, lambda = NULL, sigma = 0.1, 
     nclust = NULL, tau = 0, block.size = 0.05, 
     max.iter.harmony = 10, max.iter.cluster = 200, 
     epsilon.cluster = 1e-5, epsilon.harmony = 1e-4, 
@@ -169,7 +174,7 @@ HarmonyMatrix <- function(
     lambda <- Reduce(c, lapply(seq_len(length(B_vec)), function(b) 
         rep(lambda[b], B_vec[b])))
     lambda_mat <- diag(c(0, lambda))
-    
+                                   
     ## TODO: check that each ref val matches exactly one covariate
     ## TODO: check that you haven't marked all cells as reference! 
     if (!is.null(reference_values)) {
@@ -192,7 +197,17 @@ HarmonyMatrix <- function(
         Pr_b, sigma, theta, max.iter.cluster,epsilon.cluster,
         epsilon.harmony, nclust, tau, block.size, lambda_mat, verbose
     )
+                               
     init_cluster(harmonyObj)
+    if (!is.null(var_celltype)) {
+        init_phi_celltype(harmonyObj, meta_data[[var_celltype]])
+        if (is.null(theta_celltype)) {
+            harmonyObj$theta_celltype <- 2
+        } else {
+            harmonyObj$theta_celltype <- theta_celltype
+        }
+        
+    }
     harmonize(harmonyObj, max.iter.harmony, verbose)
     if (plot_convergence) graphics::plot(HarmonyConvergencePlot(harmonyObj))
     
