@@ -41,14 +41,14 @@ public:
 
   /* FIELDS */
   MATTYPE R, Z_orig, Z_corr, Z_cos, Y, Y_unnormed, Phi, Phi_moe, Phi_celltype; 
-  VECTYPE Pr_b, Pr_celltype, theta, N_b, sigma, sigma_prior;
+  VECTYPE Pr_b, Pr_celltype, theta, theta_celltype, N_b, sigma, sigma_prior;
   MATTYPE lambda; // diagonal MATTYPErix of ridge regression penalties
   vector<float> objective_harmony;
   vector<float> objective_kmeans, objective_kmeans_dist, objective_kmeans_entropy, objective_kmeans_cross;
   vector<int> kmeans_rounds; // OLD: Kb
   
   //    vector<uvec> phi_map;
-  float block_size, epsilon_kmeans, epsilon_harmony, merge_thresh_global, theta_celltype;
+  float block_size, epsilon_kmeans, epsilon_harmony, merge_thresh_global;
   int N, K, B, B_celltype, d, max_iter_kmeans, window_size; 
 
   // buffers
