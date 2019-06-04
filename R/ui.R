@@ -202,9 +202,9 @@ HarmonyMatrix <- function(
     if (!is.null(var_celltype)) {
         init_phi_celltype(harmonyObj, meta_data[[var_celltype]])
         if (is.null(theta_celltype)) {
-            harmonyObj$theta_celltype <- 2
+            harmonyObj$theta_celltype <- matrix(2, ncol=1)
         } else {
-            harmonyObj$theta_celltype <- theta_celltype
+            harmonyObj$theta_celltype <- matrix(theta_celltype, ncol=1)
         }
         
     }
